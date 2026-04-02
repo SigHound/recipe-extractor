@@ -1,0 +1,35 @@
+:root {
+  --text: #e8e6f0;
+  --muted: #9b96ab;
+  --bg: #0f0e14;
+  --surface: #18161f;
+  --border: #2a2635;
+  --link: #a78bfa;
+  --ok: #86efac;
+  --err: #fca5a5;
+  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, Consolas, 'Cascadia Code', monospace;
+
+  font-family: var(--sans);
+  line-height: 1.5;
+  font-weight: 400;
+  color: var(--text);
+  background-color: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+body {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}

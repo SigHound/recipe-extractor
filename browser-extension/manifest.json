@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Recipe Extractor (demo)",
+  "version": "0.1.0",
+  "description": "Opens the Recipe Extractor app with the current tab URL for extraction.",
+  "action": {
+    "default_title": "Recipe Extractor",
+    "default_popup": "popup.html"
+  },
+  "permissions": ["tabs"]
+}

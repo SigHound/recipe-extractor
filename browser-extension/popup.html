@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Recipe Extractor</title>
+    <style>
+      body {
+        font: 14px system-ui, sans-serif;
+        margin: 12px;
+        min-width: 220px;
+      }
+      button {
+        width: 100%;
+        padding: 8px 10px;
+        cursor: pointer;
+      }
+      p {
+        margin: 0 0 8px;
+        color: #444;
+        font-size: 12px;
+        line-height: 1.35;
+      }
+      code {
+        font-size: 11px;
+        word-break: break-all;
+      }
+    </style>
+  </head>
+  <body>
+    <p id="hint">Load the extractor app with this tab’s URL. Start the Vite dev server first (<code>npm run dev</code>).</p>
+    <button type="button" id="extract">Extract recipe</button>
+    <script src="popup.js"></script>
+  </body>
+</html>
