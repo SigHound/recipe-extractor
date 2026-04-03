@@ -109,23 +109,18 @@ def _step_smells_like_chat_or_spam(text: str) -> bool:
 
 
 def _browser_like_headers(url: str, user_agent: str) -> dict[str, str]:
-    """Headers closer to a real browser; many recipe CDNs block bare script clients."""
+    """
+    Minimal document headers. curl_cffi impersonate=chrome* supplies TLS + consistent
+    defaults; avoid Sec-Fetch-* / Client Hints here—mismatches vs the impersonated
+    client sometimes trigger 403 on large recipe CDNs.
+    """
     origin = f"{urlparse(url).scheme}://{urlparse(url).netloc}"
     return {
         "User-Agent": user_agent,
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
         "Accept-Encoding": "gzip, deflate, br",
-        "DNT": "1",
-        "Connection": "keep-alive",
         "Upgrade-Insecure-Requests": "1",
-        "Sec-Fetch-Dest": "document",
-        "Sec-Fetch-Mode": "navigate",
-        "Sec-Fetch-Site": "none",
-        "Sec-Fetch-User": "?1",
-        "Sec-CH-UA": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-        "Sec-CH-UA-Mobile": "?0",
-        "Sec-CH-UA-Platform": '"Windows"',
         "Referer": origin + "/",
     }
 
@@ -217,13 +212,23 @@ def _parse_html(html: str, page_url: str) -> tuple[dict[str, Any], str, list[str
     return built, "fallback", warnings
 
 
+def _strip_ld_json_noise(raw: str) -> str:
+    """Some CMS wrap JSON-LD in HTML comments; strip only outer wrappers."""
+    s = raw.strip()
+    if s.startswith("<!--"):
+        s = re.sub(r"^<!--\s*", "", s, count=1).strip()
+    if s.endswith("-->"):
+        s = re.sub(r"\s*-->\s*$", "", s, count=1).strip()
+    return s
+
+
 def _iter_jsonld_nodes(soup: BeautifulSoup):
     for script in soup.find_all("script"):
         t = (script.get("type") or "").lower()
         if "ld+json" not in t:
             continue
         raw = script.string or script.get_text() or ""
-        raw = raw.strip()
+        raw = _strip_ld_json_noise(raw.strip())
         if not raw:
             continue
         for data in _loads_jsonld_blocks(raw):
@@ -263,7 +268,15 @@ def _walk_ld(data: Any) -> list[dict[str, Any]]:
             for item in data["@graph"]:
                 nodes.extend(_walk_ld(item))
             return nodes
-        return [data]
+        nested: list[dict[str, Any]] = []
+        for key in ("mainEntity", "about"):
+            ent = data.get(key)
+            if isinstance(ent, dict):
+                nested.extend(_walk_ld(ent))
+            elif isinstance(ent, list):
+                for e in ent:
+                    nested.extend(_walk_ld(e))
+        return nested + [data]
     if isinstance(data, list):
         nodes = []
         for item in data:
@@ -272,12 +285,24 @@ def _walk_ld(data: Any) -> list[dict[str, Any]]:
     return []
 
 
+def _type_token_is_recipe(token: str) -> bool:
+    """True for Recipe, https://schema.org/Recipe, compact Recipe IRIs, etc."""
+    if not token or not isinstance(token, str):
+        return False
+    tl = token.strip().lower()
+    if tl == "recipe":
+        return True
+    if "schema.org" in tl and tl.rstrip("/").endswith("recipe"):
+        return True
+    return False
+
+
 def _types_include_recipe(node: dict[str, Any]) -> bool:
     t = node.get("@type")
     if isinstance(t, str):
-        return t.lower() == RECIPE_TYPE.lower()
+        return _type_token_is_recipe(t)
     if isinstance(t, list):
-        return any(isinstance(x, str) and x.lower() == RECIPE_TYPE.lower() for x in t)
+        return any(isinstance(x, str) and _type_token_is_recipe(x) for x in t)
     return False
 
 
@@ -343,6 +368,17 @@ def _ingredient_lines_from_item(item: Any) -> list[str]:
             return [item["text"]]
         if isinstance(item.get("name"), str):
             return [item["name"]]
+        if isinstance(item.get("value"), str):
+            return [item["value"]]
+        nested = item.get("itemListElement")
+        if isinstance(nested, list):
+            lines: list[str] = []
+            for el in nested:
+                if isinstance(el, dict) and isinstance(el.get("item"), dict):
+                    lines.extend(_ingredient_lines_from_item(el["item"]))
+                else:
+                    lines.extend(_ingredient_lines_from_item(el))
+            return lines
     return []
 
 
@@ -355,6 +391,18 @@ def _normalize_instructions(raw: Any) -> list[dict[str, Any]]:
     elif isinstance(raw, list):
         for block in raw:
             texts.extend(_instruction_texts(block))
+    elif isinstance(raw, dict):
+        dt = raw.get("@type")
+        dtl = dt.strip().lower() if isinstance(dt, str) else ""
+        if dtl == "howto":
+            step = raw.get("step")
+            if isinstance(step, list):
+                for s in step:
+                    texts.extend(_instruction_texts(s))
+            elif step is not None:
+                texts.extend(_instruction_texts(step))
+        else:
+            texts.extend(_instruction_texts(raw))
     else:
         texts = _instruction_texts(raw)
 
@@ -368,7 +416,18 @@ def _instruction_texts(item: Any) -> list[str]:
         return []
 
     t = item.get("@type")
-    type_ok = isinstance(t, str) and t.lower() in ("howtostep", "howtosection", "itemlist")
+    tl = t.strip().lower() if isinstance(t, str) else ""
+    type_ok = tl in ("howtostep", "howtosection", "itemlist", "howto")
+
+    if tl == "howto":
+        step = item.get("step")
+        if isinstance(step, list):
+            out_ht: list[str] = []
+            for s in step:
+                out_ht.extend(_instruction_texts(s))
+            return out_ht
+        if step is not None:
+            return _instruction_texts(step)
 
     if isinstance(item.get("text"), str):
         return [item["text"].strip()] if item["text"].strip() else []
