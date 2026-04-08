@@ -1,3 +1,6 @@
+# Production-style stack: Caddy on the host proxies to 127.0.0.1:8080 (web container).
+# Create backend/.env from backend/.env.example for API keys (optional but recommended).
+
 services:
   db:
     image: postgres:16-alpine
@@ -7,36 +10,33 @@ services:
       POSTGRES_DB: recipe
     volumes:
       - recipe_pg_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U recipe -d recipe"]
       interval: 5s
       timeout: 5s
       retries: 8
+    restart: unless-stopped
 
   api:
     build: ./backend
-    # Same file as local `uvicorn` (backend/.env). Compose injects vars into the container;
-    # keys are not baked into the image (.dockerignore excludes .env).
     env_file:
       - path: ./backend/.env
         required: false
     environment:
       DATABASE_URL: postgresql+psycopg://recipe:recipe@db:5432/recipe
-      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080,http://localhost,http://127.0.0.1
-    ports:
-      - "8000:8000"
+      CORS_ORIGINS: https://recipe-extractor.kianoryan.com,http://localhost:5173,http://127.0.0.1:5173,http://127.0.0.1:8080,http://localhost:8080,http://localhost,http://127.0.0.1
     depends_on:
       db:
         condition: service_healthy
+    restart: unless-stopped
 
   web:
     build: ./frontend
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:80"
     depends_on:
       - api
+    restart: unless-stopped
 
 volumes:
   recipe_pg_data:
