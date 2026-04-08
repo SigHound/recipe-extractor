@@ -673,6 +673,12 @@ def _usda_fdc_search_query(line: str) -> str:
     if re.search(r"\b(rice vinegar|rice wine|rice paper|hoisin)\b", low):
         return base[:200]
 
+    # Cooking oils: "light" / "extra light" on olive oil means mild flavor, not fewer calories.
+    # USDA search for "light olive oil" often returns a branded or odd first hit with no mapped
+    # energy/macros → grams estimate looks right but calories stay blank.
+    if re.search(r"\bolive\b", low) and re.search(r"\boil\b", low):
+        return "olive oil"[:200]
+
     # Rice: raw grain ~365 kcal/100g vs cooked ~130 — we assume cooked unless stated dry
     if re.search(
         r"\b(basmati|jasmine|arborio|brown rice|white rice|wild rice|\brice\b|risotto)\b",
