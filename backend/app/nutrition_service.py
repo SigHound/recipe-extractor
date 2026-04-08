@@ -479,6 +479,11 @@ def _estimate_grams(line: str) -> float:
         serving = _standard_serving_grams(low)
         if serving is not None:
             return serving
+        if re.search(r"\begg\b", low) and not re.search(
+            r"\b(eggplant|eggnog|egg\s+noodles?|egg\s+rolls?|egg\s+substitute)\b",
+            low,
+        ):
+            return 50.0
         return 5.0
 
     # Longest / most specific unit patterns first
@@ -514,6 +519,23 @@ def _estimate_grams(line: str) -> float:
             return q * 35.0
         if re.match(r"^pieces?\b", rlow, re.I):
             return q * 40.0
+        # Whole shell eggs — generic q*25 was ~half a large egg; skews per-serving grams and kcal.
+        if re.search(r"\begg\b", low) and not re.search(
+            r"\b(eggplant|eggnog|egg\s+noodles?|egg\s+rolls?|egg\s+substitute)\b",
+            low,
+        ):
+            per = 50.0
+            if re.search(r"\bjumbo\b", low):
+                per = 63.0
+            elif re.search(r"\b(extra\s+large|xl)\b", low):
+                per = 56.0
+            elif re.search(r"\blarge\b", low):
+                per = 50.0
+            elif re.search(r"\bmedium\b", low):
+                per = 44.0
+            elif re.search(r"\bsmall\b", low):
+                per = 38.0
+            return q * per
         std = _standard_serving_grams(low)
         if std is not None:
             return q * std
@@ -678,6 +700,20 @@ def _usda_fdc_search_query(line: str) -> str:
     # energy/macros → grams estimate looks right but calories stay blank.
     if re.search(r"\bolive\b", low) and re.search(r"\boil\b", low):
         return "olive oil"[:200]
+
+    # Eggs: "large egg" / "1 egg" search often returns a branded hit without mapped energy.
+    if re.search(r"\begg\s+noodles?\b", low) or re.search(r"\beggs?\s+noodles?\b", low):
+        return base[:200]
+    if re.search(r"\begg\s+substitute\b", low):
+        return base[:200]
+    if re.search(r"\begg\s+rolls?\b", low):
+        return base[:200]
+    if re.search(r"\begg\b", low):
+        if re.search(r"\b(yolk|yolks)\b", low):
+            return "egg yolk raw"[:200]
+        if re.search(r"\b(white|whites)\b", low) and not re.search(r"\bwhole\b", low):
+            return "egg white raw"[:200]
+        return "egg whole raw fresh"[:200]
 
     # Rice: raw grain ~365 kcal/100g vs cooked ~130 — we assume cooked unless stated dry
     if re.search(
